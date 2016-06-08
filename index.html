@@ -29,10 +29,44 @@
         Below is a tree view with dynamic loading of information for services
     </p>
     <div id="app">
-        {{message}}
+        <!--{{message}}-->
         <div v-for="server in servers">
-            {{server.url}}
+            <!--{{server.url}}-->
         </div>
+
+        <ul id="server_list">
+            <li v-for="server in servers">
+                <a href="{{server.url}}">{{server.url}}</a>
+                <ul>
+                    <!--<li>{{server | json}}</li>-->
+                    <li v-if="server.currentVersion">Current Version : {{server.currentVersion}}</li>
+                    <li v-if="server.folders.length > 0">
+                        Folders
+                        <ul v-for="folder in server.folders">
+                            <li><a href="{{folder.url}}">{{folder.name}}</a></li>
+                            <!--<ul>-->
+                            <!--<li>child services</li>-->
+                            <!--</ul>-->
+                        </ul>
+                    </li>
+                    <li v-if="server.services.length > 0">
+                        Services
+                        <ul v-for="service in server.services">
+                            <li><a href="{{service.url}}">{{service.name}}</a>
+                                <small>({{service.type}})</small>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+
+        <!--<ul id="demo">-->
+        <!--<item-->
+        <!--class="item"-->
+        <!--:model="servers">-->
+        <!--</item>-->
+        <!--</ul>-->
 
     </div>
 
@@ -45,7 +79,7 @@
     </p>
     <h3>
         <a id="support-or-contact" class="anchor" href="#support-or-contact" aria-hidden="true">
-            <span aria-hidden="true"  class="octicon octicon-link"></span></a>Support or Contact</h3>
+            <span aria-hidden="true" class="octicon octicon-link"></span></a>Support or Contact</h3>
     <p>
         Need help!? I am on Twitter <a href="https://twitter.com/mapdev">@mapdev</a>
     </p>
@@ -58,8 +92,8 @@
     </footer>
 </section>
 
-
 <script src="//code.jquery.com/jquery-2.2.4.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/async/1.5.2/async.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/vue/1.0.24/vue.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/vue-resource/0.7.2/vue-resource.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/vue-router/0.7.13/vue-router.min.js"></script>
@@ -68,63 +102,72 @@
 <script>
     //do all stuff vue etc.
     //setup the page
+
     function setup() {
-        Vue.http.headers.common['Access-Control-Allow-Origin'] = 'http://xxx.xxx.xxx.xxx:94'
-        Vue.http.headers.common['Access-Control-Request-Method'] = '*'
         var vue = new Vue({
             el: '#app',
             ready: function () {
-                getServerList(this);
+                this.getServerList();
             },
             data: {
                 message: 'Hello Vue.js!',
                 servers: []
+//                treeData: data
+            },
+            methods: {
+                getServerList: function () {
+                    this.$http({url: 'data/servers.json', method: 'GET'})
+                            .then(function (response) {
+                                this.servers = response.data;
+                                this.iterateServerList();
+                            }, function (response) {
+                                swal('Error getting server list', "Couldn't retrieve the list of URL's", 'error');
+                            });
+                },
+                iterateServerList: function () {
+                    for (var i = 0; i < this.servers.length; i++) {
+                        this.getServerInfo(this.servers[i]);
+                    }
+                },
+                getServerInfo: function (server) {
+                    this.$http.jsonp(server.url + '?f=json', {}, function (data) {
+
+                        //get a load of other info before reassinging back to vue
+                        var new_obj = Object.assign({}, server, data);
+                        for (var i = 0; i < new_obj.folders.length; i++) {
+                            //also get child services
+
+                            new_obj.folders[i] = {
+                                'name': new_obj.folders[i],
+                                'url': new_obj.url + '/' + new_obj.folders[i],
+                            };
+                        }
+                        //root services
+                        for (var j = 0; j < new_obj.services.length; j++) {
+                            new_obj.services[j] = Object.assign({}, new_obj.services[j],
+                                    {'url': new_obj.url + '/' + new_obj.services[j].name + '/'
+                                    + new_obj.services[j].type});
+                        }
+                        this.servers.$set(this.servers.indexOf(server), new_obj);
+                    }, {
+                        'jsonp': 'callback'
+                    });
+                },
+//                getServiceInfo: function (service) {
+//                    //get a service info and update the object
+//                    this.$http.jsonp(service.url + '?f=json', {}, function (data) {
+////                        console.log(data);
+//                        service = Object.assign(service, data);
+//                    }, {
+//                        'jsonp': 'callback'
+//                    });
+//
+//                },
+                getFolderServices: function (folder) {
+
+                }
             }
         })
-    }
-
-    //get the list of servers
-    function getServerList(vue) {
-        vue.$http({url: 'data/servers.json', method: 'GET'}).then(function (response) {
-            vue.servers = response.data;
-            iterateServerList(this);
-        }, function (response) {
-            swal('Error getting server list', "Couldn't retrieve the list of URL's", 'error');
-        });
-    }
-
-    //for each server url get the servers info and save it back to the server info
-    function iterateServerList(vue) {
-        //get one
-        var svr = vue.servers[0];
-        getServerInfo(vue,svr);
-    }
-
-    //get a servers JSON details
-    function getServerInfo(vue,server) {
-        console.log(server);
-//        vue.$http({url: 'http://cors.io/?u='+ server.url + '?f=json', method: 'GET'}).then(function (response) {
-        vue.$http({url: 'http://cors.io/?u=https://sampleserver3.arcgisonline.com/ArcGIS/rest/services/?f=json', method: 'GET'}).then(function (response) {
-            swal('Got Server','success','success');
-            console.log(response.data);
-        }, function (response) {
-            swal('Error getting server info', "Couldn't retrieve the data", 'error');
-        });
-    }
-
-    //get a Single Service Info
-    function getServiceInfo(service) {
-
-    }
-
-    //get a Folders child service
-    function getFolderServices(folder) {
-
-    }
-
-    //build the TreeView of data
-    function buildTree() {
-
     }
 
     setup();
